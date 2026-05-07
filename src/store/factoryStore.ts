@@ -5,12 +5,14 @@ import type { FactoryResult, ProductionGoal } from '../types'
 import { resolveRecipeTree } from '../logic/resolveRecipeTree'
 import { buildFlowGraph } from '../utils/layout'
 import { getRecipesForItem } from '../data/loader'
+import type { MinerConfig } from '../data/miners'
 
 interface FactoryStore {
   // ── User inputs ────────────────────────────────────────────────────────────
   goal: ProductionGoal | null
   recipeOverrides: Map<string, string>   // itemName → recipeName
   clockOverrides: Map<string, number>    // stepId → clockSpeed %
+  minerConfigs: Map<string, MinerConfig> // itemName → { mk, purity }
 
   // ── Computed ───────────────────────────────────────────────────────────────
   factoryResult: FactoryResult | null
@@ -24,13 +26,14 @@ interface FactoryStore {
   setGoal: (item: string, rate: number) => void
   setRecipeOverride: (item: string, recipeName: string) => void
   setClockOverride: (stepId: string, clock: number) => void
+  setMinerConfig: (item: string, config: MinerConfig) => void
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   resetLayout: () => void
 }
 
 function recalculate(state: FactoryStore): Partial<FactoryStore> {
-  const { goal, recipeOverrides, clockOverrides, nodePositions } = state
+  const { goal, recipeOverrides, clockOverrides, nodePositions, minerConfigs } = state
   if (!goal || !goal.item || goal.rate <= 0) return {}
 
   const result = resolveRecipeTree(
@@ -42,8 +45,16 @@ function recalculate(state: FactoryStore): Partial<FactoryStore> {
 
   const { nodes, edges } = buildFlowGraph(
     result,
-    (stepId, clock) => useFactoryStore.getState().setClockOverride(stepId, clock),
+    {
+      onClockChange: (stepId, clock) =>
+        useFactoryStore.getState().setClockOverride(stepId, clock),
+      onMinerConfigChange: (item, config) =>
+        useFactoryStore.getState().setMinerConfig(item, config),
+      onRecipeChange: (item, recipeName) =>
+        useFactoryStore.getState().setRecipeOverride(item, recipeName),
+    },
     nodePositions,
+    minerConfigs,
   )
 
   return { factoryResult: result, nodes, edges }
@@ -53,6 +64,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   goal: null,
   recipeOverrides: new Map(),
   clockOverrides: new Map(),
+  minerConfigs: new Map(),
   factoryResult: null,
   nodes: [],
   edges: [],
@@ -61,7 +73,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   setGoal: (item, rate) => {
     const next: Partial<FactoryStore> = {
       goal: { item, rate },
-      // Reset overrides when goal changes
       clockOverrides: new Map(),
       nodePositions: new Map(),
     }
@@ -73,7 +84,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     recipeOverrides.set(item, recipeName)
     set(state => ({
       recipeOverrides,
-      nodePositions: new Map(), // reset positions on topology change
+      nodePositions: new Map(),
       ...recalculate({ ...state, recipeOverrides }),
     }))
   },
@@ -81,11 +92,22 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   setClockOverride: (stepId, clock) => {
     const clockOverrides = new Map(get().clockOverrides)
     clockOverrides.set(stepId, clock)
-    // Clock changes only affect machine count + power, not positions
     set(state => ({
       clockOverrides,
       ...recalculate({ ...state, clockOverrides }),
     }))
+  },
+
+  setMinerConfig: (item, config) => {
+    const minerConfigs = new Map(get().minerConfigs)
+    minerConfigs.set(item, config)
+    // Only update the specific node's data — no tree recalculation needed
+    const nodes = get().nodes.map(node =>
+      node.id === `raw||${item}`
+        ? { ...node, data: { ...node.data, minerConfig: config } }
+        : node,
+    )
+    set({ minerConfigs, nodes })
   },
 
   onNodesChange: changes => {
@@ -111,7 +133,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
 }))
 
-/** Convenience: available recipes for an item, respecting current overrides */
 export function getAvailableRecipes(item: string) {
   return getRecipesForItem(item)
 }

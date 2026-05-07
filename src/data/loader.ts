@@ -39,6 +39,11 @@ export function getRecipesForItem(item: string): RawRecipe[] {
   return recipesByOutput.get(item) ?? []
 }
 
+/** レシピが使う製造設備名を返す */
+export function getMachineForRecipe(recipe: RawRecipe): string {
+  return recipe.craft_station.find(s => MACHINE_STATIONS.has(s)) ?? ''
+}
+
 export function getDefaultRecipe(
   item: string,
   overrides: Map<string, string>,

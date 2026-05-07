@@ -2,32 +2,29 @@ import { memo, useCallback } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import type { ProdNodeData } from '../utils/layout'
+import { getMachineForRecipe } from '../data/loader'
 
 // ── Machine metadata ──────────────────────────────────────────────────────────
-const MACHINE_META: Record<
-  string,
-  { icon: string; color: string; bg: string }
-> = {
-  製錬炉:       { icon: '🔥', color: '#f97316', bg: '#431407' },
-  製作機:       { icon: '⚙️', color: '#3b82f6', bg: '#172554' },
-  組立機:       { icon: '🔧', color: '#a855f7', bg: '#2e1065' },
-  製造機:       { icon: '🏭', color: '#eab308', bg: '#422006' },
-  精製機:       { icon: '🛢️', color: '#06b6d4', bg: '#083344' },
-  鋳造炉:       { icon: '⚒️', color: '#ef4444', bg: '#450a0a' },
-  混合機:       { icon: '🌀', color: '#22c55e', bg: '#052e16' },
-  充填機:       { icon: '📦', color: '#ec4899', bg: '#500724' },
-  粒子加速器:   { icon: '⚛️', color: '#6366f1', bg: '#1e1b4b' },
+const MACHINE_META: Record<string, { icon: string; color: string; bg: string }> = {
+  製錬炉:           { icon: '🔥', color: '#f97316', bg: '#431407' },
+  製作機:           { icon: '⚙️', color: '#3b82f6', bg: '#172554' },
+  組立機:           { icon: '🔧', color: '#a855f7', bg: '#2e1065' },
+  製造機:           { icon: '🏭', color: '#eab308', bg: '#422006' },
+  精製機:           { icon: '🛢️', color: '#06b6d4', bg: '#083344' },
+  鋳造炉:           { icon: '⚒️', color: '#ef4444', bg: '#450a0a' },
+  混合機:           { icon: '🌀', color: '#22c55e', bg: '#052e16' },
+  充填機:           { icon: '📦', color: '#ec4899', bg: '#500724' },
+  粒子加速器:       { icon: '⚛️', color: '#6366f1', bg: '#1e1b4b' },
   量子エンコーダー: { icon: '🔬', color: '#8b5cf6', bg: '#2e1065' },
-  変換機:       { icon: '♻️', color: '#14b8a6', bg: '#042f2e' },
+  変換機:           { icon: '♻️', color: '#14b8a6', bg: '#042f2e' },
 }
 const DEFAULT_META = { icon: '⚙️', color: '#64748b', bg: '#0f172a' }
-
-function getMeta(name: string) {
-  return MACHINE_META[name] ?? DEFAULT_META
-}
+function getMeta(name: string) { return MACHINE_META[name] ?? DEFAULT_META }
 
 // ── Handle Y offset calculator ────────────────────────────────────────────────
-const HEADER_H = 84
+// Header breakdown: 8px padding + 22px machine row + 26px recipe selector + 8px padding = 64px
+// + 2px border = 66px ≈ 90px with the borderBottom bar
+const HEADER_H = 90
 const CLOCK_H = 28
 const SECTION_H = 20
 const ROW_H = 22
@@ -36,23 +33,12 @@ function inputHandleTop(idx: number): number {
   return HEADER_H + CLOCK_H + SECTION_H + idx * ROW_H + ROW_H / 2
 }
 function outputHandleTop(nInputs: number, idx: number): number {
-  return (
-    HEADER_H +
-    CLOCK_H +
-    SECTION_H +
-    nInputs * ROW_H +
-    SECTION_H +
-    idx * ROW_H +
-    ROW_H / 2
-  )
+  return HEADER_H + CLOCK_H + SECTION_H + nInputs * ROW_H + SECTION_H + idx * ROW_H + ROW_H / 2
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export const ProductionNode = memo(function ProductionNode({
-  data,
-  selected,
-}: NodeProps) {
-  const { step, onClockChange } = data as ProdNodeData
+export const ProductionNode = memo(function ProductionNode({ data, selected }: NodeProps) {
+  const { step, availableRecipes, onClockChange, onRecipeChange } = data as ProdNodeData
   const meta = getMeta(step.machineName)
 
   const handleClockChange = useCallback(
@@ -62,6 +48,15 @@ export const ProductionNode = memo(function ProductionNode({
     },
     [step.id, onClockChange],
   )
+
+  const handleRecipeChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onRecipeChange(step.itemName, e.target.value)
+    },
+    [step.itemName, onRecipeChange],
+  )
+
+  const hasMultipleRecipes = availableRecipes.length > 1
 
   return (
     <div
@@ -75,31 +70,23 @@ export const ProductionNode = memo(function ProductionNode({
         borderRadius: 10,
         fontSize: 12,
         color: '#cbd5e1',
-        boxShadow: selected
-          ? `0 0 0 2px ${meta.color}`
-          : `0 4px 16px rgba(0,0,0,0.6)`,
+        boxShadow: selected ? `0 0 0 2px ${meta.color}` : `0 4px 16px rgba(0,0,0,0.6)`,
         fontFamily: 'sans-serif',
         position: 'relative',
       }}
     >
-      {/* ── Header ── */}
+      {/* ── Header: machine name ── */}
       <div
         style={{
           background: meta.bg,
           borderBottom: `1px solid ${meta.color}44`,
-          padding: '8px 12px',
+          padding: '8px 12px 6px',
           borderRadius: '8px 8px 0 0',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            marginBottom: 2,
-          }}
-        >
-          <span style={{ fontSize: 16 }}>{meta.icon}</span>
+        {/* Machine name row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          <span style={{ fontSize: 15 }}>{meta.icon}</span>
           <span style={{ fontWeight: 700, color: meta.color, fontSize: 13 }}>
             {step.machineName || '(未知)'}
           </span>
@@ -111,13 +98,58 @@ export const ProductionNode = memo(function ProductionNode({
                 fontSize: 9,
                 padding: '1px 5px',
                 borderRadius: 9,
+                marginLeft: 'auto',
               }}
             >
               代替
             </span>
           )}
         </div>
-        <div style={{ color: '#94a3b8', fontSize: 11 }}>{step.recipe.name}</div>
+
+        {/* Recipe selector / label */}
+        {hasMultipleRecipes ? (
+          <select
+            value={step.recipe.name}
+            onChange={handleRecipeChange}
+            className="nodrag"
+            style={{
+              width: '100%',
+              background: '#1e293b',
+              border: `1px solid ${meta.color}66`,
+              borderRadius: 5,
+              color: '#e2e8f0',
+              fontSize: 11,
+              padding: '4px 6px',
+              cursor: 'pointer',
+              outline: 'none',
+            }}
+          >
+            {availableRecipes.map(r => {
+              const machine = getMachineForRecipe(r)
+              const isAlt = r.name.startsWith('代替')
+              const machineDiff = machine && machine !== step.machineName
+              return (
+                <option key={r.name} value={r.name}>
+                  {isAlt ? '★ ' : ''}{r.name}
+                  {machineDiff ? ` [${machine}]` : ''}
+                </option>
+              )
+            })}
+          </select>
+        ) : (
+          <div
+            style={{
+              color: '#94a3b8',
+              fontSize: 11,
+              padding: '3px 0',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {step.recipe.name}
+          </div>
+        )}
       </div>
 
       {/* ── Clock speed ── */}
@@ -159,9 +191,7 @@ export const ProductionNode = memo(function ProductionNode({
 
       {/* ── Inputs ── */}
       <div style={{ padding: '4px 12px 2px' }}>
-        <div
-          style={{ color: '#60a5fa', fontSize: 10, marginBottom: 2, fontWeight: 600 }}
-        >
+        <div style={{ color: '#60a5fa', fontSize: 10, marginBottom: 2, fontWeight: 600 }}>
           ▼ 入力
         </div>
         {step.inputRates.map(inp => (
@@ -187,9 +217,7 @@ export const ProductionNode = memo(function ProductionNode({
 
       {/* ── Outputs ── */}
       <div style={{ padding: '4px 12px 2px' }}>
-        <div
-          style={{ color: '#4ade80', fontSize: 10, marginBottom: 2, fontWeight: 600 }}
-        >
+        <div style={{ color: '#4ade80', fontSize: 10, marginBottom: 2, fontWeight: 600 }}>
           ▲ 出力
         </div>
         {step.outputRates.map(out => (
@@ -227,14 +255,9 @@ export const ProductionNode = memo(function ProductionNode({
       >
         <span style={{ color: '#94a3b8' }}>
           🏭 ×{Math.ceil(step.machinesNeeded)}台
-          <span style={{ color: '#64748b', fontSize: 9 }}>
-            {' '}
-            ({step.machinesNeeded.toFixed(2)})
-          </span>
+          <span style={{ color: '#64748b', fontSize: 9 }}> ({step.machinesNeeded.toFixed(2)})</span>
         </span>
-        <span style={{ color: '#fbbf24' }}>
-          ⚡ {step.totalPower.toFixed(1)} MW
-        </span>
+        <span style={{ color: '#fbbf24' }}>⚡ {step.totalPower.toFixed(1)} MW</span>
       </div>
 
       {/* ── Handles (per-item) ── */}
@@ -244,13 +267,7 @@ export const ProductionNode = memo(function ProductionNode({
           type="target"
           position={Position.Left}
           id={`in-${inp.item}`}
-          style={{
-            top: inputHandleTop(i),
-            background: '#3b82f6',
-            width: 10,
-            height: 10,
-            border: '2px solid #1d4ed8',
-          }}
+          style={{ top: inputHandleTop(i), background: '#3b82f6', width: 10, height: 10, border: '2px solid #1d4ed8' }}
         />
       ))}
       {step.outputRates.map((out, i) => (
@@ -259,13 +276,7 @@ export const ProductionNode = memo(function ProductionNode({
           type="source"
           position={Position.Right}
           id={`out-${out.item}`}
-          style={{
-            top: outputHandleTop(step.inputRates.length, i),
-            background: '#22c55e',
-            width: 10,
-            height: 10,
-            border: '2px solid #15803d',
-          }}
+          style={{ top: outputHandleTop(step.inputRates.length, i), background: '#22c55e', width: 10, height: 10, border: '2px solid #15803d' }}
         />
       ))}
     </div>

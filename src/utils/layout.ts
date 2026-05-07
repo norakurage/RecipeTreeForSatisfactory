@@ -1,20 +1,31 @@
 import dagre from '@dagrejs/dagre'
 import type { Node, Edge } from '@xyflow/react'
-import type { FactoryResult, ProductionStep } from '../types'
+import type { FactoryResult, ProductionStep, RawRecipe } from '../types'
+import type { MinerConfig } from '../data/miners'
+import { DEFAULT_MINER_CONFIG } from '../data/miners'
+import { getRecipesForItem } from '../data/loader'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const NODE_W = 270
-const PROD_NODE_BASE_H = 180   // header + footer; inputs/outputs add to this
-const RAW_NODE_H = 72
+const PROD_NODE_BASE_H = 186  // +6 for taller header (recipe selector row)
+const RAW_NODE_H = 150   // taller: includes miner selector
 const ROW_H = 22
 const NODE_SEP = 60
 const RANK_SEP = 120
 
 export type ProdNodeData = {
   step: ProductionStep
+  availableRecipes: RawRecipe[]
   onClockChange: (stepId: string, clock: number) => void
+  onRecipeChange: (item: string, recipeName: string) => void
 }
-export type RawNodeData = { item: string; rate: number }
+
+export type RawNodeData = {
+  item: string
+  rate: number
+  minerConfig: MinerConfig
+  onMinerConfigChange: (item: string, config: MinerConfig) => void
+}
 
 function productionNodeHeight(step: ProductionStep): number {
   return (
@@ -27,8 +38,13 @@ function productionNodeHeight(step: ProductionStep): number {
 // ── Build React Flow nodes + edges from factory result ───────────────────────
 export function buildFlowGraph(
   result: FactoryResult,
-  onClockChange: (stepId: string, clock: number) => void,
+  callbacks: {
+    onClockChange: (stepId: string, clock: number) => void
+    onMinerConfigChange: (item: string, config: MinerConfig) => void
+    onRecipeChange: (item: string, recipeName: string) => void
+  },
   existingPositions: Map<string, { x: number; y: number }>,
+  minerConfigs: Map<string, MinerConfig>,
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = []
   const edges: Edge[] = []
@@ -38,7 +54,12 @@ export function buildFlowGraph(
     nodes.push({
       id: stepId,
       type: 'production',
-      data: { step, onClockChange } satisfies ProdNodeData,
+      data: {
+        step,
+        availableRecipes: getRecipesForItem(step.itemName),
+        onClockChange: callbacks.onClockChange,
+        onRecipeChange: callbacks.onRecipeChange,
+      } satisfies ProdNodeData,
       position: existingPositions.get(stepId) ?? { x: 0, y: 0 },
     })
   }
@@ -49,7 +70,12 @@ export function buildFlowGraph(
     nodes.push({
       id: nodeId,
       type: 'rawMaterial',
-      data: { item, rate } satisfies RawNodeData,
+      data: {
+        item,
+        rate,
+        minerConfig: minerConfigs.get(item) ?? DEFAULT_MINER_CONFIG,
+        onMinerConfigChange: callbacks.onMinerConfigChange,
+      } satisfies RawNodeData,
       position: existingPositions.get(nodeId) ?? { x: 0, y: 0 },
     })
   }
@@ -58,7 +84,6 @@ export function buildFlowGraph(
   const edgeSet = new Set<string>()
   for (const step of result.steps.values()) {
     for (const inp of step.inputRates) {
-      // Find which step produces this item
       const sourceStep = [...result.steps.values()].find(s =>
         s.outputRates.some(o => o.item === inp.item),
       )
@@ -93,9 +118,7 @@ export function buildFlowGraph(
 
   // ── Dagre layout for nodes without stored positions ─────────────────────
   const newNodeIds = new Set(
-    nodes
-      .filter(n => !existingPositions.has(n.id))
-      .map(n => n.id),
+    nodes.filter(n => !existingPositions.has(n.id)).map(n => n.id),
   )
 
   if (newNodeIds.size > 0) {
