@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python data/a.py)",
+      "Bash(python -c ' *)",
+      "Bash(npm run *)"
+    ]
+  }
+}
