@@ -26,7 +26,7 @@ function getMeta(name: string) { return MACHINE_META[name] ?? DEFAULT_META }
 // Column header: 20px
 // Total top offset: 84px
 const HANDLE_TOP_BASE = 84
-const ROW_H = 22
+const ROW_H = 32
 
 function handleTop(idx: number): number {
   return HANDLE_TOP_BASE + idx * ROW_H + ROW_H / 2
@@ -179,6 +179,7 @@ export const MachineNode = memo(function MachineNode({ data, selected }: NodePro
                   flexDirection: 'column',
                   justifyContent: 'center',
                   borderBottom: '1px solid #1e293b',
+                  overflow: 'hidden',
                 }}
               >
                 {inp ? (
@@ -212,6 +213,7 @@ export const MachineNode = memo(function MachineNode({ data, selected }: NodePro
                   flexDirection: 'column',
                   justifyContent: 'center',
                   borderBottom: '1px solid #1e293b',
+                  overflow: 'hidden',
                 }}
               >
                 {out ? (
