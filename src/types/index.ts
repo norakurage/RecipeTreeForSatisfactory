@@ -31,17 +31,18 @@ export interface RawBuilding {
 // ─── Factory calculation result types ────────────────────────────────────────
 
 export interface ProductionStep {
-  id: string;             // `${itemName}||${recipeName}`
+  id: string;              // `${itemName}||${recipeName}`
   itemName: ItemId;
   recipe: RawRecipe;
-  totalRate: number;      // items/min demanded
-  machinesNeeded: number; // fractional (ceil = physical machines)
-  clockSpeed: number;     // 1–250 %
+  totalRate: number;       // items/min demanded (all machines combined)
+  machinesNeeded: number;  // fractional
+  instanceCount: number;   // ceil(machinesNeeded) — physical machine cards
+  clockSpeed: number;      // uniform per-machine clock = machinesNeeded/instanceCount * 100
   building: RawBuilding | null;
   machineName: string;
-  inputRates: { item: ItemId; rate: number }[];
-  outputRates: { item: ItemId; rate: number }[];
-  totalPower: number;     // MW
+  inputRates: { item: ItemId; rate: number }[];   // total across all machines
+  outputRates: { item: ItemId; rate: number }[];  // total across all machines
+  totalPower: number;      // MW
   isAlternate: boolean;
 }
 

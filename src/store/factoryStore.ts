@@ -3,7 +3,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react'
 import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react'
 import type { FactoryResult, ProductionGoal } from '../types'
 import { resolveRecipeTree } from '../logic/resolveRecipeTree'
-import { buildFlowGraph } from '../utils/layout'
+import { buildFlowGraph, machineNodeId } from '../utils/layout'
 import { getRecipesForItem } from '../data/loader'
 import type { MinerConfig } from '../data/miners'
 
@@ -11,8 +11,7 @@ interface FactoryStore {
   // ── User inputs ────────────────────────────────────────────────────────────
   goal: ProductionGoal | null
   recipeOverrides: Map<string, string>   // itemName → recipeName
-  clockOverrides: Map<string, number>    // stepId → clockSpeed %
-  minerConfigs: Map<string, MinerConfig> // itemName → { mk, purity }
+  minerConfigs: Map<string, MinerConfig> // itemName → { mk, purity, clockSpeed, sommersloop }
 
   // ── Computed ───────────────────────────────────────────────────────────────
   factoryResult: FactoryResult | null
@@ -25,7 +24,6 @@ interface FactoryStore {
   // ── Actions ────────────────────────────────────────────────────────────────
   setGoal: (item: string, rate: number) => void
   setRecipeOverride: (item: string, recipeName: string) => void
-  setClockOverride: (stepId: string, clock: number) => void
   setMinerConfig: (item: string, config: MinerConfig) => void
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
@@ -33,21 +31,14 @@ interface FactoryStore {
 }
 
 function recalculate(state: FactoryStore): Partial<FactoryStore> {
-  const { goal, recipeOverrides, clockOverrides, nodePositions, minerConfigs } = state
+  const { goal, recipeOverrides, nodePositions, minerConfigs } = state
   if (!goal || !goal.item || goal.rate <= 0) return {}
 
-  const result = resolveRecipeTree(
-    goal.item,
-    goal.rate,
-    recipeOverrides,
-    clockOverrides,
-  )
+  const result = resolveRecipeTree(goal.item, goal.rate, recipeOverrides, minerConfigs)
 
   const { nodes, edges } = buildFlowGraph(
     result,
     {
-      onClockChange: (stepId, clock) =>
-        useFactoryStore.getState().setClockOverride(stepId, clock),
       onMinerConfigChange: (item, config) =>
         useFactoryStore.getState().setMinerConfig(item, config),
       onRecipeChange: (item, recipeName) =>
@@ -63,7 +54,6 @@ function recalculate(state: FactoryStore): Partial<FactoryStore> {
 export const useFactoryStore = create<FactoryStore>((set, get) => ({
   goal: null,
   recipeOverrides: new Map(),
-  clockOverrides: new Map(),
   minerConfigs: new Map(),
   factoryResult: null,
   nodes: [],
@@ -73,7 +63,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   setGoal: (item, rate) => {
     const next: Partial<FactoryStore> = {
       goal: { item, rate },
-      clockOverrides: new Map(),
       nodePositions: new Map(),
     }
     set(state => ({ ...next, ...recalculate({ ...state, ...next } as FactoryStore) }))
@@ -89,25 +78,15 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     }))
   },
 
-  setClockOverride: (stepId, clock) => {
-    const clockOverrides = new Map(get().clockOverrides)
-    clockOverrides.set(stepId, clock)
-    set(state => ({
-      clockOverrides,
-      ...recalculate({ ...state, clockOverrides }),
-    }))
-  },
-
   setMinerConfig: (item, config) => {
     const minerConfigs = new Map(get().minerConfigs)
     minerConfigs.set(item, config)
-    // Only update the specific node's data — no tree recalculation needed
-    const nodes = get().nodes.map(node =>
-      node.id === `raw||${item}`
-        ? { ...node, data: { ...node.data, minerConfig: config } }
-        : node,
-    )
-    set({ minerConfigs, nodes })
+    // Full recalculate + position reset: miner output changes → machine counts change
+    set(state => ({
+      minerConfigs,
+      nodePositions: new Map(),
+      ...recalculate({ ...state, minerConfigs, nodePositions: new Map() }),
+    }))
   },
 
   onNodesChange: changes => {
@@ -136,3 +115,5 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
 export function getAvailableRecipes(item: string) {
   return getRecipesForItem(item)
 }
+
+export { machineNodeId }

@@ -35,6 +35,9 @@ for (const recipe of allRecipes) {
   }
 }
 
+/** このセンチネル値をレシピ override に設定すると「原材料(採掘)として扱う」 */
+export const RAW_OVERRIDE = '__raw__' as const
+
 export function getRecipesForItem(item: string): RawRecipe[] {
   return recipesByOutput.get(item) ?? []
 }
@@ -51,6 +54,8 @@ export function getDefaultRecipe(
   const candidates = getRecipesForItem(item)
   if (!candidates.length) return null
   const overrideName = overrides.get(item)
+  // '__raw__' sentinel → force treat as raw material
+  if (overrideName === RAW_OVERRIDE) return null
   if (overrideName) {
     return candidates.find(r => r.name === overrideName) ?? candidates[0]
   }

@@ -7,56 +7,81 @@ import {
 import {
   getBaseOutputPerMin,
   getMachinesNeeded,
+  getInstanceCount,
+  getPerMachineClock,
   getTotalPower,
 } from './machineMath'
+import { getMinerRate, DEFAULT_MINER_CONFIG } from '../data/miners'
+import type { MinerConfig } from '../data/miners'
 
 /**
- * Incremental demand aggregation algorithm:
+ * Two-pass supply-aware calculation:
  *
- * addDemand(item, rate):
- *   1. Add `rate` to itemDemands[item]
- *   2. If first visit  → recurse for all inputs at ratio * rate
- *   3. If revisit      → recurse only for the DELTA so we don't double-count
+ * Pass 1 (demand): collect raw material needs at targetRate.
+ * Scale step: for each raw material, scale = minerRate / demanded.
+ *   effectiveScale = min(scale) — limited by the tightest bottleneck miner.
+ *   effectiveTarget = targetRate × effectiveScale  (always ≤ targetRate).
+ * Pass 2 (final): collect all demands at effectiveTarget; build steps.
  *
- * Input rates are ratio-based (independent of clockSpeed), so total input
- * for an item is simply: demand(item) * (inputCount / outputCount).
- * ClockSpeed only affects machinesNeeded and power.
+ * Result: production machines scale to fully utilise the actual integer-miner output.
+ * Changing miner clock/sommersloop changes minerRate → changes scale → changes machine counts.
  */
 export function resolveRecipeTree(
   targetItem: string,
   targetRate: number,
   recipeOverrides: Map<string, string>,
-  clockOverrides: Map<string, number>,
+  minerConfigs: Map<string, MinerConfig>,
 ): FactoryResult {
-  // ── Phase 1: collect total rate demanded for every item ──────────────────
-  const itemDemands = new Map<string, number>()
+  // ── Shared addDemand helper ───────────────────────────────────────────────
+  function buildDemands(rootRate: number): Map<string, number> {
+    const demands = new Map<string, number>()
 
-  function addDemand(item: string, rate: number, depth = 0): void {
-    if (rate < 0.0001 || depth > 30) return
+    function addDemand(item: string, rate: number, depth = 0): void {
+      if (rate < 0.0001 || depth > 30) return
 
-    const recipe = getDefaultRecipe(item, recipeOverrides)
+      const recipe = getDefaultRecipe(item, recipeOverrides)
 
-    if (!recipe) {
-      // Raw material — just accumulate
-      itemDemands.set(item, (itemDemands.get(item) ?? 0) + rate)
-      return
+      if (!recipe) {
+        demands.set(item, (demands.get(item) ?? 0) + rate)
+        return
+      }
+
+      const prev = demands.get(item) ?? 0
+      demands.set(item, prev + rate)
+
+      const primaryOut = recipe.outputs.find(o => o.item === item)!
+      for (const inp of recipe.inputs) {
+        addDemand(inp.item, rate * (inp.count / primaryOut.count), depth + 1)
+      }
     }
 
-    const prev = itemDemands.get(item) ?? 0
-    itemDemands.set(item, prev + rate)
-
-    const primaryOut = recipe.outputs.find(o => o.item === item)!
-
-    for (const inp of recipe.inputs) {
-      // ratio of input to primary output (clockSpeed-independent)
-      const ratio = inp.count / primaryOut.count
-      addDemand(inp.item, rate * ratio, depth + 1)
-    }
+    addDemand(targetItem, rootRate)
+    return demands
   }
 
-  addDemand(targetItem, targetRate)
+  // ── Pass 1: demand at targetRate → find raw material needs ───────────────
+  const pass1 = buildDemands(targetRate)
 
-  // ── Phase 2: build ProductionStep objects from aggregated demands ─────────
+  // ── Scale step: compute effective target from integer miner output ────────
+  let minScale = Infinity
+  for (const [item, demanded] of pass1) {
+    if (getDefaultRecipe(item, recipeOverrides) !== null) continue // skip production items
+
+    const config = minerConfigs.get(item) ?? DEFAULT_MINER_CONFIG
+    const mRate = getMinerRate(config)
+    if (mRate <= 0 || demanded <= 0) continue
+
+    const scale = mRate / demanded
+    if (scale < minScale) minScale = scale
+  }
+  if (!isFinite(minScale)) minScale = 1
+
+  const effectiveTarget = targetRate * minScale
+
+  // ── Pass 2: final demand at effectiveTarget ───────────────────────────────
+  const itemDemands = buildDemands(effectiveTarget)
+
+  // ── Build ProductionStep objects ──────────────────────────────────────────
   const steps = new Map<string, ProductionStep>()
   const rawMaterials = new Map<string, number>()
 
@@ -69,14 +94,14 @@ export function resolveRecipeTree(
     }
 
     const stepId = `${item}||${recipe.name}`
-    const clockSpeed = clockOverrides.get(stepId) ?? 100
-
     const machineName =
       recipe.craft_station.find(s => MACHINE_STATIONS.has(s)) ?? ''
     const building = allBuildings[machineName] ?? null
 
     const baseOut = getBaseOutputPerMin(recipe, item)
-    const machinesNeeded = getMachinesNeeded(totalRate, baseOut, clockSpeed)
+    const machinesNeeded = getMachinesNeeded(totalRate, baseOut)
+    const instanceCount = getInstanceCount(machinesNeeded)
+    const clockSpeed = getPerMachineClock(machinesNeeded)
 
     const primaryOut = recipe.outputs.find(o => o.item === item)!
 
@@ -84,15 +109,12 @@ export function resolveRecipeTree(
       item: inp.item,
       rate: totalRate * (inp.count / primaryOut.count),
     }))
-
     const outputRates = recipe.outputs.map(out => ({
       item: out.item,
       rate: totalRate * (out.count / primaryOut.count),
     }))
 
-    const totalPower = building
-      ? getTotalPower(building, machinesNeeded, clockSpeed)
-      : 0
+    const totalPower = building ? getTotalPower(building, machinesNeeded) : 0
 
     steps.set(stepId, {
       id: stepId,
@@ -100,6 +122,7 @@ export function resolveRecipeTree(
       recipe,
       totalRate,
       machinesNeeded,
+      instanceCount,
       clockSpeed,
       building,
       machineName,
@@ -110,15 +133,14 @@ export function resolveRecipeTree(
     })
   }
 
-  // ── Summary stats ────────────────────────────────────────────────────────
+  // ── Summary stats ─────────────────────────────────────────────────────────
   let totalPower = 0
   const totalMachines: Record<string, number> = {}
-
   for (const step of steps.values()) {
     totalPower += step.totalPower
     if (step.machineName) {
       totalMachines[step.machineName] =
-        (totalMachines[step.machineName] ?? 0) + step.machinesNeeded
+        (totalMachines[step.machineName] ?? 0) + step.instanceCount
     }
   }
 

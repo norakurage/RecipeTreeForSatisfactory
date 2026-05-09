@@ -1,10 +1,4 @@
 import { useFactoryStore } from '../store/factoryStore'
-import { getMinerRate, getMinersNeeded } from '../data/miners'
-import type { OrePurity } from '../data/miners'
-
-const PURITY_COLOR: Record<OrePurity, string> = {
-  '不純': '#f87171', '普通': '#94a3b8', '高純度': '#34d399',
-}
 
 const MACHINE_ICONS: Record<string, string> = {
   製錬炉: '🔥', 製作機: '⚙️', 組立機: '🔧', 製造機: '🏭',
@@ -13,7 +7,7 @@ const MACHINE_ICONS: Record<string, string> = {
 }
 
 export function RightSidebar() {
-  const { factoryResult, resetLayout, minerConfigs } = useFactoryStore()
+  const { factoryResult, resetLayout } = useFactoryStore()
 
   if (!factoryResult) {
     return (
@@ -32,16 +26,6 @@ export function RightSidebar() {
 
   const rawList = [...rawMaterials.entries()].sort((a, b) => b[1] - a[1])
   const machineList = Object.entries(totalMachines).sort((a, b) => b[1] - a[1])
-
-  // Aggregate miners by Mk
-  const minerByMk: Record<string, { count: number; items: { item: string; needed: number; purity: OrePurity }[] }> = {}
-  for (const [item, rate] of rawMaterials) {
-    const cfg = minerConfigs.get(item) ?? { mk: 'Mk.1' as const, purity: '普通' as const }
-    const needed = getMinersNeeded(rate, cfg)
-    if (!minerByMk[cfg.mk]) minerByMk[cfg.mk] = { count: 0, items: [] }
-    minerByMk[cfg.mk].count += needed
-    minerByMk[cfg.mk].items.push({ item, needed, purity: cfg.purity })
-  }
 
   return (
     <aside style={sidebarStyle}>
@@ -127,64 +111,6 @@ export function RightSidebar() {
           </div>
         </section>
 
-        {/* ── Miner summary ── */}
-        {Object.keys(minerByMk).length > 0 && (
-          <section>
-            <SectionTitle>採鉱機台数</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(['Mk.1', 'Mk.2', 'Mk.3'] as const)
-                .filter(mk => minerByMk[mk])
-                .map(mk => {
-                  const { count, items } = minerByMk[mk]
-                  return (
-                    <div key={mk} style={{ background: '#1e293b', borderRadius: 6, overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          padding: '5px 8px',
-                          background: '#0f2236',
-                          borderBottom: '1px solid #334155',
-                        }}
-                      >
-                        <span style={{ color: '#fbbf24', fontWeight: 700 }}>
-                          ⛏️ 採鉱機 {mk}
-                        </span>
-                        <span style={{ color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
-                          ×{Math.ceil(count)}台{' '}
-                          <span style={{ color: '#475569', fontSize: 10 }}>
-                            ({count.toFixed(2)})
-                          </span>
-                        </span>
-                      </div>
-                      {items.map(({ item, needed, purity }) => (
-                        <div
-                          key={item}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            padding: '3px 8px',
-                            fontSize: 10,
-                          }}
-                        >
-                          <span style={{ color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
-                            🪨 {item}
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                            <span style={{ color: PURITY_COLOR[purity], fontSize: 9 }}>{purity}</span>
-                            <span style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
-                              ×{Math.ceil(needed)}台
-                            </span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
-            </div>
-          </section>
-        )}
-
         {/* ── Raw materials ── */}
         <section>
           <SectionTitle>必要採掘量</SectionTitle>
@@ -230,7 +156,7 @@ export function RightSidebar() {
                   }}
                 >
                   <span>
-                    {MACHINE_ICONS[step.machineName] ?? '⚙️'} ×{Math.ceil(step.machinesNeeded)}
+                    {MACHINE_ICONS[step.machineName] ?? '⚙️'} ×{step.instanceCount}
                   </span>
                   <span style={{ color: '#fbbf24' }}>
                     {step.totalPower.toFixed(1)} MW

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useFactoryStore, getAvailableRecipes } from '../store/factoryStore'
-import { allItems } from '../data/loader'
+import { allItems, RAW_OVERRIDE, getMachineForRecipe } from '../data/loader'
 
 export function LeftSidebar() {
   const { goal, recipeOverrides, setGoal, setRecipeOverride, factoryResult } =
@@ -205,12 +205,18 @@ export function LeftSidebar() {
                       }
                       style={{ ...inputStyle, padding: '4px 6px' }}
                     >
-                      {recipes.map(r => (
-                        <option key={r.name} value={r.name}>
-                          {r.name}
-                          {r.name.startsWith('代替') ? ' (代替)' : ''}
-                        </option>
-                      ))}
+                      {/* 採掘オプション（変換機などをバイパスしたい場合） */}
+                      <option value={RAW_OVERRIDE}>🪨 採掘 / 原材料として扱う</option>
+                      {recipes.map(r => {
+                        const machine = getMachineForRecipe(r)
+                        const isAlt = r.name.startsWith('代替')
+                        return (
+                          <option key={r.name} value={r.name}>
+                            {isAlt ? '★ ' : ''}{r.name}
+                            {machine ? ` [${machine}]` : ''}
+                          </option>
+                        )
+                      })}
                     </select>
                   </div>
                 )

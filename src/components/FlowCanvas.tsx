@@ -10,12 +10,14 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { useFactoryStore } from '../store/factoryStore'
-import { ProductionNode } from '../nodes/ProductionNode'
+import { MachineNode } from '../nodes/MachineNode'
 import { RawMaterialNode } from '../nodes/RawMaterialNode'
+import { PoolNode } from '../nodes/PoolNode'
 
 const nodeTypes: NodeTypes = {
-  production: ProductionNode,
+  machine: MachineNode,
   rawMaterial: RawMaterialNode,
+  pool: PoolNode,
 }
 
 export function FlowCanvas() {
@@ -59,7 +61,9 @@ export function FlowCanvas() {
             border: '1px solid #1e3a5f',
           }}
           maskColor="rgba(0,0,0,0.6)"
-          nodeColor={n => (n.type === 'rawMaterial' ? '#475569' : '#3b82f6')}
+          nodeColor={n =>
+            n.type === 'rawMaterial' ? '#475569' : n.type === 'pool' ? '#22c55e' : '#3b82f6'
+          }
         />
       </ReactFlow>
 

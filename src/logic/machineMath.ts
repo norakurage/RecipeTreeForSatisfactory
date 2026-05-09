@@ -7,20 +7,29 @@ export function getBaseOutputPerMin(recipe: RawRecipe, item: string): number {
   return (out.count / recipe.duration) * 60
 }
 
-/** Number of machines needed (may be fractional) */
+/** Fractional machines needed at 100% clock */
 export function getMachinesNeeded(
   targetRate: number,
   baseOutputPerMin: number,
-  clockSpeed: number,
 ): number {
-  const effective = baseOutputPerMin * (clockSpeed / 100)
-  if (effective <= 0) return 0
-  return targetRate / effective
+  if (baseOutputPerMin <= 0) return 0
+  return targetRate / baseOutputPerMin
+}
+
+/** Physical machine count = ceil(machinesNeeded) */
+export function getInstanceCount(machinesNeeded: number): number {
+  return Math.max(1, Math.ceil(machinesNeeded))
+}
+
+/** Uniform clock per machine so total output = targetRate with no excess */
+export function getPerMachineClock(machinesNeeded: number): number {
+  const n = getInstanceCount(machinesNeeded)
+  return (machinesNeeded / n) * 100
 }
 
 /**
- * Power draw for a single machine at the given clock speed.
- * Formula: P = basePower * (clock/100) ^ powerExponent
+ * Power for a single machine at the given clock speed.
+ * P = basePower * (clock/100) ^ powerExponent
  */
 export function getPowerPerMachine(
   building: RawBuilding,
@@ -32,22 +41,13 @@ export function getPowerPerMachine(
   )
 }
 
-/**
- * Total power for a fractional number of machines.
- * Full machines run at clockSpeed; the fractional last machine
- * runs at a proportionally reduced clock speed to hit the exact rate.
- */
+/** Total power for all instances running at uniform clock */
 export function getTotalPower(
   building: RawBuilding,
   machinesNeeded: number,
-  clockSpeed: number,
 ): number {
   if (machinesNeeded <= 0) return 0
-  const full = Math.floor(machinesNeeded)
-  const frac = machinesNeeded - full
-  let total = full * getPowerPerMachine(building, clockSpeed)
-  if (frac > 0.0001) {
-    total += getPowerPerMachine(building, clockSpeed * frac)
-  }
-  return total
+  const n = getInstanceCount(machinesNeeded)
+  const clock = getPerMachineClock(machinesNeeded)
+  return n * getPowerPerMachine(building, clock)
 }
