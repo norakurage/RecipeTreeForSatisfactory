@@ -56,3 +56,11 @@ html, body, #root {
 .react-flow__node:active {
   cursor: grabbing;
 }
+
+/* Section nodes: remove React Flow's default white background/border/shadow */
+.react-flow__node.section-node {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}

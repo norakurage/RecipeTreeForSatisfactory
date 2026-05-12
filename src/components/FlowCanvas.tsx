@@ -13,11 +13,13 @@ import { useFactoryStore } from '../store/factoryStore'
 import { MachineNode } from '../nodes/MachineNode'
 import { RawMaterialNode } from '../nodes/RawMaterialNode'
 import { PoolNode } from '../nodes/PoolNode'
+import { SectionNode } from '../nodes/SectionNode'
 
 const nodeTypes: NodeTypes = {
   machine: MachineNode,
   rawMaterial: RawMaterialNode,
   pool: PoolNode,
+  section: SectionNode,
 }
 
 export function FlowCanvas() {

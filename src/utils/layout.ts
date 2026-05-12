@@ -4,6 +4,8 @@ import type { FactoryResult, ProductionStep, RawRecipe } from '../types'
 import type { MinerConfig } from '../data/miners'
 import { DEFAULT_MINER_CONFIG } from '../data/miners'
 import { getRecipesForItem } from '../data/loader'
+import type { SectionNodeData } from '../nodes/SectionNode'
+import { SECTION_HEADER_H } from '../nodes/SectionNode'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const NODE_W = 270
@@ -12,12 +14,15 @@ const RAW_NODE_H = 190
 const POOL_NODE_W = 130
 const POOL_NODE_H = 60
 const NODE_SEP = 60
-const RANK_SEP = 90   // pool nodes act as rank spacers so tighter is fine
+const RANK_SEP = 100
 
-// Machine node height components
+const SECTION_INNER_GAP = 6   // gap between header and first machine card
+const SECTION_PAD_BOTTOM = 8  // padding below last machine card
+
+// Machine node height components (must match MachineNode.tsx rendering)
 const MACHINE_HEADER_H = 64
 const COL_HEADER_H = 20
-const ROW_H = 22
+const ROW_H = 32
 
 function machineNodeHeight(step: ProductionStep): number {
   return (
@@ -25,6 +30,17 @@ function machineNodeHeight(step: ProductionStep): number {
     COL_HEADER_H +
     Math.max(step.inputRates.length, step.outputRates.length) * ROW_H +
     8
+  )
+}
+
+function sectionTotalHeight(step: ProductionStep): number {
+  const machH = machineNodeHeight(step)
+  return (
+    SECTION_HEADER_H +
+    SECTION_INNER_GAP +
+    step.instanceCount * machH +
+    Math.max(0, step.instanceCount - 1) * NODE_GAP +
+    SECTION_PAD_BOTTOM
   )
 }
 
@@ -55,6 +71,10 @@ export type PoolNodeData = {
 
 export function machineNodeId(stepId: string, i: number): string {
   return `${stepId}|m${i}`
+}
+
+export function sectionNodeId(stepId: string): string {
+  return `section||${stepId}`
 }
 
 export function poolNodeId(stepId: string, item: string): string {
@@ -99,8 +119,30 @@ export function buildFlowGraph(
   const edges: Edge[] = []
   const edgeSet = new Set<string>()
 
-  // ── Production machine nodes ──────────────────────────────────────────────
-  for (const [, step] of result.steps) {
+  // ── Section nodes (one per step, acts as parent group) ────────────────────
+  for (const [stepId, step] of result.steps) {
+    const sid = sectionNodeId(stepId)
+    const secH = sectionTotalHeight(step)
+    nodes.push({
+      id: sid,
+      type: 'section',
+      data: {
+        itemName: step.itemName,
+        machineName: step.machineName,
+        instanceCount: step.instanceCount,
+        totalRate: step.totalRate,
+      } satisfies SectionNodeData,
+      position: existingPositions.get(sid) ?? { x: 0, y: 0 },
+      style: { width: NODE_W, height: secH },
+      // Suppress default React Flow node styles that clash with custom rendering
+      className: 'section-node',
+    })
+  }
+
+  // ── Machine nodes (children of their section, not draggable individually) ──
+  for (const [stepId, step] of result.steps) {
+    const sid = sectionNodeId(stepId)
+    const machH = machineNodeHeight(step)
     const perInput = step.inputRates.map(r => ({
       item: r.item,
       rate: r.rate / step.instanceCount,
@@ -111,10 +153,11 @@ export function buildFlowGraph(
     }))
 
     for (let i = 0; i < step.instanceCount; i++) {
-      const nodeId = machineNodeId(step.id, i)
+      const nodeId = machineNodeId(stepId, i)
       nodes.push({
         id: nodeId,
         type: 'machine',
+        parentId: sid,
         data: {
           step,
           instanceIndex: i,
@@ -125,7 +168,12 @@ export function buildFlowGraph(
           availableRecipes: getRecipesForItem(step.itemName),
           onRecipeChange: callbacks.onRecipeChange,
         } satisfies MachineNodeData,
-        position: existingPositions.get(nodeId) ?? { x: 0, y: 0 },
+        // Relative position within the section
+        position: {
+          x: 0,
+          y: SECTION_HEADER_H + SECTION_INNER_GAP + i * (machH + NODE_GAP),
+        },
+        draggable: false,
       })
     }
   }
@@ -205,9 +253,9 @@ export function buildFlowGraph(
     }
   }
 
-  // ── Dagre layout ─────────────────────────────────────────────────────────
+  // ── Dagre layout (section-level, not machine-level) ───────────────────────
   const needsLayout =
-    [...result.steps.values()].some(s => !existingPositions.has(machineNodeId(s.id, 0))) ||
+    [...result.steps.values()].some(s => !existingPositions.has(sectionNodeId(s.id))) ||
     [...result.rawMaterials.keys()].some(item => !existingPositions.has(`raw||${item}`))
 
   if (needsLayout) {
@@ -215,9 +263,12 @@ export function buildFlowGraph(
     g.setGraph({ rankdir: 'LR', nodesep: NODE_SEP, ranksep: RANK_SEP })
     g.setDefaultEdgeLabel(() => ({}))
 
-    // Step representatives (m0)
+    // Section representatives
     for (const [stepId, step] of result.steps) {
-      g.setNode(machineNodeId(stepId, 0), { width: NODE_W, height: machineNodeHeight(step) })
+      g.setNode(sectionNodeId(stepId), {
+        width: NODE_W,
+        height: sectionTotalHeight(step),
+      })
     }
     // Pool nodes
     for (const [, step] of result.steps) {
@@ -230,11 +281,10 @@ export function buildFlowGraph(
       g.setNode(`raw||${item}`, { width: NODE_W, height: RAW_NODE_H })
     }
 
-    // Representative edges for rank computation:
-    // step_m0 → pool → consumer_m0   and   raw → consumer_m0
+    // Edges: section → pool → consumer section,  raw → consumer section
     for (const [, step] of result.steps) {
       for (const out of step.outputRates) {
-        g.setEdge(machineNodeId(step.id, 0), poolNodeId(step.id, out.item))
+        g.setEdge(sectionNodeId(step.id), poolNodeId(step.id, out.item))
       }
     }
     for (const step of result.steps.values()) {
@@ -247,27 +297,21 @@ export function buildFlowGraph(
           : result.rawMaterials.has(inp.item)
             ? `raw||${inp.item}`
             : null
-        if (sourceId) g.setEdge(sourceId, machineNodeId(step.id, 0))
+        if (sourceId) g.setEdge(sourceId, sectionNodeId(step.id))
       }
     }
 
     dagre.layout(g)
 
-    // Apply step positions: m0 from dagre, m1..mN-1 stacked below
-    for (const [stepId, step] of result.steps) {
-      const repId = machineNodeId(stepId, 0)
-      if (existingPositions.has(repId)) continue
-      const gNode = g.node(repId)
+    // Apply section positions
+    for (const [stepId] of result.steps) {
+      const sid = sectionNodeId(stepId)
+      if (existingPositions.has(sid)) continue
+      const gNode = g.node(sid)
       if (!gNode) continue
-      const nodeH = machineNodeHeight(step)
-      const baseX = gNode.x - gNode.width / 2
-      const baseY = gNode.y - gNode.height / 2
-      for (let i = 0; i < step.instanceCount; i++) {
-        const nid = machineNodeId(stepId, i)
-        const node = nodes.find(n => n.id === nid)
-        if (node && !existingPositions.has(nid)) {
-          node.position = { x: baseX, y: baseY + i * (nodeH + NODE_GAP) }
-        }
+      const node = nodes.find(n => n.id === sid)
+      if (node) {
+        node.position = { x: gNode.x - gNode.width / 2, y: gNode.y - gNode.height / 2 }
       }
     }
 
