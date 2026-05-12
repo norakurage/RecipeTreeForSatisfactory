@@ -69,6 +69,7 @@ export const RawMaterialNode = memo(function RawMaterialNode({
 
   const hasManufacturingRecipes = availableRecipes.length > 0
 
+
   return (
     <div
       style={{

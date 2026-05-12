@@ -7,6 +7,11 @@ export const MACHINE_STATIONS = new Set([
   '混合機', '充填機', '粒子加速器', '量子エンコーダー', '変換機',
 ])
 
+// Fluid/gas resources extracted directly from the environment (not manufactured).
+// Their only "machine" recipes are packaging ↔ unpackaging cycles, which would
+// create circular dependencies in the recipe tree — treat them as raw materials.
+export const RAW_FLUID_RESOURCES = new Set(['水', '原油', '窒素ガス'])
+
 // Only machine-producible recipes with valid inputs/outputs
 export const allRecipes: RawRecipe[] = (recipesJson as RawRecipe[]).filter(
   r =>
@@ -51,6 +56,7 @@ export function getDefaultRecipe(
   item: string,
   overrides: Map<string, string>,
 ): RawRecipe | null {
+  if (RAW_FLUID_RESOURCES.has(item)) return null
   const candidates = getRecipesForItem(item)
   if (!candidates.length) return null
   const overrideName = overrides.get(item)
