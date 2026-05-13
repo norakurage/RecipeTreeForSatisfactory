@@ -4,7 +4,10 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   BackgroundVariant,
+  useReactFlow,
+  useNodes,
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -13,13 +16,70 @@ import { useFactoryStore } from '../store/factoryStore'
 import { MachineNode } from '../nodes/MachineNode'
 import { RawMaterialNode } from '../nodes/RawMaterialNode'
 import { PoolNode } from '../nodes/PoolNode'
-import { SectionNode } from '../nodes/SectionNode'
+import { SectionNode, SECTION_HEADER_H, type SectionNodeData } from '../nodes/SectionNode'
+import { reflow } from '../utils/layout'
 
 const nodeTypes: NodeTypes = {
   machine: MachineNode,
   rawMaterial: RawMaterialNode,
   pool: PoolNode,
   section: SectionNode,
+}
+
+function CollapseAllButton() {
+  const nodes = useNodes()
+  const { setNodes, getEdges } = useReactFlow()
+
+  const sections = nodes.filter(n => n.type === 'section')
+  if (sections.length === 0) return null
+
+  const allCollapsed = sections.every(n => (n.data as SectionNodeData).collapsed)
+
+  const toggle = () => {
+    const next = !allCollapsed
+    setNodes(ns => {
+      const updated = ns.map(node => {
+        if (node.type === 'section') {
+          return {
+            ...node,
+            data: { ...node.data, collapsed: next },
+            style: { ...node.style, height: next ? SECTION_HEADER_H : (node.data as SectionNodeData).fullHeight },
+          }
+        }
+        if (node.type === 'machine') {
+          return { ...node, hidden: next }
+        }
+        return node
+      })
+      return next ? reflow(updated, getEdges()) : updated
+    })
+  }
+
+  return (
+    <Panel position="top-left">
+      <button
+        onClick={toggle}
+        style={{
+          background: '#0d1b2a',
+          border: '1px solid #1e3a5f',
+          borderRadius: 8,
+          color: '#94a3b8',
+          fontSize: 12,
+          padding: '5px 12px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontFamily: 'sans-serif',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#1e293b')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#0d1b2a')}
+      >
+        <span style={{ fontSize: 10 }}>{allCollapsed ? '▼' : '▲'}</span>
+        {allCollapsed ? '全て展開' : '全て折りたたむ'}
+      </button>
+    </Panel>
+  )
 }
 
 export function FlowCanvas() {
@@ -67,6 +127,7 @@ export function FlowCanvas() {
             n.type === 'rawMaterial' ? '#475569' : n.type === 'pool' ? '#22c55e' : '#3b82f6'
           }
         />
+        <CollapseAllButton />
       </ReactFlow>
 
       {/* Empty state */}

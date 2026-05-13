@@ -131,10 +131,13 @@ export function buildFlowGraph(
         machineName: step.machineName,
         instanceCount: step.instanceCount,
         totalRate: step.totalRate,
+        fullHeight: secH,
+        inputItems: step.inputRates.map(r => r.item),
+        outputItems: step.outputRates.map(r => r.item),
+        collapsed: true,
       } satisfies SectionNodeData,
       position: existingPositions.get(sid) ?? { x: 0, y: 0 },
-      style: { width: NODE_W, height: secH },
-      // Suppress default React Flow node styles that clash with custom rendering
+      style: { width: NODE_W, height: SECTION_HEADER_H },
       className: 'section-node',
     })
   }
@@ -168,12 +171,12 @@ export function buildFlowGraph(
           availableRecipes: getRecipesForItem(step.itemName),
           onRecipeChange: callbacks.onRecipeChange,
         } satisfies MachineNodeData,
-        // Relative position within the section
         position: {
           x: 0,
           y: SECTION_HEADER_H + SECTION_INNER_GAP + i * (machH + NODE_GAP),
         },
         draggable: false,
+        hidden: true,
       })
     }
   }
@@ -208,29 +211,21 @@ export function buildFlowGraph(
     })
   }
 
-  // ── Edges: machine → pool ─────────────────────────────────────────────────
+  // ── Edges: section → pool ────────────────────────────────────────────────
   for (const step of result.steps.values()) {
-    const N = step.instanceCount
+    const sid = sectionNodeId(step.id)
     for (const out of step.outputRates) {
       const pid = poolNodeId(step.id, out.item)
-      const perRate = out.rate / N
-      for (let i = 0; i < N; i++) {
-        const eid = `${machineNodeId(step.id, i)}→${pid}`
-        if (edgeSet.has(eid)) continue
-        edgeSet.add(eid)
-        edges.push(makeEdge(
-          eid,
-          machineNodeId(step.id, i), pid,
-          `out-${out.item}`, `in-${out.item}`,
-          perRate,
-        ))
-      }
+      const eid = `${sid}→${pid}→${out.item}`
+      if (edgeSet.has(eid)) continue
+      edgeSet.add(eid)
+      edges.push(makeEdge(eid, sid, pid, `sec-out-${out.item}`, `in-${out.item}`, out.rate))
     }
   }
 
-  // ── Edges: pool / raw → machine inputs ───────────────────────────────────
+  // ── Edges: pool / raw → section inputs ───────────────────────────────────
   for (const step of result.steps.values()) {
-    const N = step.instanceCount
+    const sid = sectionNodeId(step.id)
     for (const inp of step.inputRates) {
       const sourceStep = [...result.steps.values()].find(s =>
         s.outputRates.some(o => o.item === inp.item),
@@ -242,14 +237,10 @@ export function buildFlowGraph(
           : null
       if (!sourceId) continue
 
-      const perRate = inp.rate / N
-      for (let j = 0; j < N; j++) {
-        const tid = machineNodeId(step.id, j)
-        const eid = `${sourceId}→${tid}→${inp.item}`
-        if (edgeSet.has(eid)) continue
-        edgeSet.add(eid)
-        edges.push(makeEdge(eid, sourceId, tid, `out-${inp.item}`, `in-${inp.item}`, perRate))
-      }
+      const eid = `${sourceId}→${sid}→${inp.item}`
+      if (edgeSet.has(eid)) continue
+      edgeSet.add(eid)
+      edges.push(makeEdge(eid, sourceId, sid, `out-${inp.item}`, `sec-in-${inp.item}`, inp.rate))
     }
   }
 
@@ -263,11 +254,11 @@ export function buildFlowGraph(
     g.setGraph({ rankdir: 'LR', nodesep: NODE_SEP, ranksep: RANK_SEP })
     g.setDefaultEdgeLabel(() => ({}))
 
-    // Section representatives
-    for (const [stepId, step] of result.steps) {
+    // Section representatives — use collapsed height since sections start collapsed
+    for (const [stepId] of result.steps) {
       g.setNode(sectionNodeId(stepId), {
         width: NODE_W,
-        height: sectionTotalHeight(step),
+        height: SECTION_HEADER_H,
       })
     }
     // Pool nodes
@@ -343,4 +334,39 @@ export function buildFlowGraph(
   }
 
   return { nodes, edges }
+}
+
+// ── Re-layout with current node heights (called after collapse/expand) ────────
+export function reflow(nodes: Node[], edges: Edge[]): Node[] {
+  const g = new dagre.graphlib.Graph()
+  g.setGraph({ rankdir: 'LR', nodesep: NODE_SEP, ranksep: RANK_SEP })
+  g.setDefaultEdgeLabel(() => ({}))
+
+  for (const node of nodes) {
+    if (node.type === 'section') {
+      g.setNode(node.id, { width: NODE_W, height: (node.style?.height as number) ?? SECTION_HEADER_H })
+    } else if (node.type === 'pool') {
+      g.setNode(node.id, { width: POOL_NODE_W, height: POOL_NODE_H })
+    } else if (node.type === 'rawMaterial') {
+      g.setNode(node.id, { width: NODE_W, height: RAW_NODE_H })
+    }
+  }
+
+  for (const edge of edges) {
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+      g.setEdge(edge.source, edge.target)
+    }
+  }
+
+  dagre.layout(g)
+
+  return nodes.map(node => {
+    if (node.type === 'machine') return node
+    const gNode = g.node(node.id)
+    if (!gNode) return node
+    return {
+      ...node,
+      position: { x: gNode.x - gNode.width / 2, y: gNode.y - gNode.height / 2 },
+    }
+  })
 }

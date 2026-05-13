@@ -81,11 +81,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   setMinerConfig: (item, config) => {
     const minerConfigs = new Map(get().minerConfigs)
     minerConfigs.set(item, config)
-    // Full recalculate + position reset: miner output changes → machine counts change
     set(state => ({
       minerConfigs,
-      nodePositions: new Map(),
-      ...recalculate({ ...state, minerConfigs, nodePositions: new Map() }),
+      ...recalculate({ ...state, minerConfigs }),
     }))
   },
 

@@ -1,22 +1,12 @@
 import { memo, useCallback } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import type { MachineNodeData } from '../utils/layout'
 import { getMachineForRecipe, RAW_OVERRIDE } from '../data/loader'
 import { getMachineMeta } from '../utils/machineColors'
 
-// ── Handle Y position calculator ──────────────────────────────────────────────
-// Header: machine-row(30px) + recipe-selector(34px) = 64px
-// Column header: 20px
-// Total top offset: 84px
-const HANDLE_TOP_BASE = 84
 const ROW_H = 32
 
-function handleTop(idx: number): number {
-  return HANDLE_TOP_BASE + idx * ROW_H + ROW_H / 2
-}
 
-// ── Component ─────────────────────────────────────────────────────────────────
 export const MachineNode = memo(function MachineNode({ data, selected }: NodeProps) {
   const {
     step,
@@ -216,37 +206,6 @@ export const MachineNode = memo(function MachineNode({ data, selected }: NodePro
         </div>
       </div>
 
-      {/* ── Handles ── */}
-      {perMachineInputs.map((inp, i) => (
-        <Handle
-          key={`in-${inp.item}`}
-          type="target"
-          position={Position.Left}
-          id={`in-${inp.item}`}
-          style={{
-            top: handleTop(i),
-            background: '#3b82f6',
-            width: 10,
-            height: 10,
-            border: '2px solid #1d4ed8',
-          }}
-        />
-      ))}
-      {perMachineOutputs.map((out, i) => (
-        <Handle
-          key={`out-${out.item}`}
-          type="source"
-          position={Position.Right}
-          id={`out-${out.item}`}
-          style={{
-            top: handleTop(i),
-            background: '#22c55e',
-            width: 10,
-            height: 10,
-            border: '2px solid #15803d',
-          }}
-        />
-      ))}
     </div>
   )
 })
