@@ -4,8 +4,9 @@ import type { NodeProps } from '@xyflow/react'
 import type { RawNodeData } from '../utils/layout'
 import {
   MINER_MK_OPTIONS,
+  MINER_SOMERSLOOP_SLOTS,
   PURITY_OPTIONS,
-  SOMMERSLOOP_OPTIONS,
+  getSommersloopOptions,
   getMinerRate,
 } from '../data/miners'
 import type { MinerMk, OrePurity } from '../data/miners'
@@ -33,7 +34,10 @@ export const RawMaterialNode = memo(function RawMaterialNode({
 
   const handleMkChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
-      onMinerConfigChange(item, { ...minerConfig, mk: e.target.value as MinerMk })
+      const mk = e.target.value as MinerMk
+      const maxSlots = MINER_SOMERSLOOP_SLOTS[mk]
+      const sommersloop = Math.min(minerConfig.sommersloop, maxSlots)
+      onMinerConfigChange(item, { ...minerConfig, mk, sommersloop })
     },
     [item, minerConfig, onMinerConfigChange],
   )
@@ -199,9 +203,13 @@ export const RawMaterialNode = memo(function RawMaterialNode({
             className="nodrag"
             style={{ ...selectStyle, flex: 1, color: '#a78bfa' }}
           >
-            {SOMMERSLOOP_OPTIONS.map(n => (
-              <option key={n} value={n}>×{n + 1}</option>
-            ))}
+            {getSommersloopOptions(minerConfig.mk).map(n => {
+              const slots = MINER_SOMERSLOOP_SLOTS[minerConfig.mk]
+              const mult = (1 + n / slots).toFixed(2)
+              return (
+                <option key={n} value={n}>🔮{n} (×{mult})</option>
+              )
+            })}
           </select>
         </div>
       </div>
