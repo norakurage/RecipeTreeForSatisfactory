@@ -48,7 +48,30 @@ function recalculate(state: FactoryStore): Partial<FactoryStore> {
     minerConfigs,
   )
 
-  return { factoryResult: result, nodes, edges }
+  // Preserve collapsed/expanded state from before recalculation
+  const expandedSections = new Set<string>()
+  for (const node of state.nodes) {
+    if (node.type === 'section' && !(node.data as { collapsed: boolean }).collapsed) {
+      expandedSections.add(node.id)
+    }
+  }
+
+  const restoredNodes = expandedSections.size === 0 ? nodes : nodes.map(node => {
+    if (node.type === 'section' && expandedSections.has(node.id)) {
+      const fullHeight = (node.data as { fullHeight: number }).fullHeight
+      return {
+        ...node,
+        data: { ...node.data, collapsed: false },
+        style: { ...node.style, height: fullHeight },
+      }
+    }
+    if (node.type === 'machine' && node.parentId && expandedSections.has(node.parentId)) {
+      return { ...node, hidden: false }
+    }
+    return node
+  })
+
+  return { factoryResult: result, nodes: restoredNodes, edges }
 }
 
 export const useFactoryStore = create<FactoryStore>((set, get) => ({
