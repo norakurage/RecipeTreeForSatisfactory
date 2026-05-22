@@ -8,7 +8,6 @@ export function LeftSidebar() {
 
   const [search, setSearch] = useState('')
   const [selectedItem, setSelectedItem] = useState(goal?.item ?? '')
-  const [rate, setRate] = useState(goal?.rate ?? 30)
   const [showDropdown, setShowDropdown] = useState(false)
 
   const filtered = useMemo(
@@ -20,8 +19,8 @@ export function LeftSidebar() {
   )
 
   function handleCalculate() {
-    if (!selectedItem || rate <= 0) return
-    setGoal(selectedItem, rate)
+    if (!selectedItem) return
+    setGoal(selectedItem, 1)
   }
 
   const recipeItems = factoryResult
@@ -146,30 +145,21 @@ export function LeftSidebar() {
               placeholder="例: 鉄板"
               style={inputStyle}
             />
-            <label style={labelStyle}>生産量 (個/min)</label>
-            <input
-              type="number"
-              min={0.1}
-              step={5}
-              value={rate}
-              onChange={e => setRate(Number(e.target.value))}
-              style={inputStyle}
-            />
             <button
               onClick={handleCalculate}
-              disabled={!selectedItem || rate <= 0}
+              disabled={!selectedItem}
               style={{
                 padding: '8px 0',
                 background:
-                  selectedItem && rate > 0
+                  selectedItem
                     ? 'linear-gradient(135deg, #f59e0b, #d97706)'
                     : '#1e293b',
-                color: selectedItem && rate > 0 ? '#000' : '#475569',
+                color: selectedItem ? '#000' : '#475569',
                 border: 'none',
                 borderRadius: 6,
                 fontWeight: 700,
                 fontSize: 13,
-                cursor: selectedItem && rate > 0 ? 'pointer' : 'not-allowed',
+                cursor: selectedItem ? 'pointer' : 'not-allowed',
                 transition: 'all 0.15s',
               }}
             >
