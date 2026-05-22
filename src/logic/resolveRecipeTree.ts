@@ -2,6 +2,7 @@ import type { FactoryResult, ProductionStep } from '../types'
 import {
   allBuildings,
   getDefaultRecipe,
+  INFINITE_RESOURCES,
   MACHINE_STATIONS,
 } from '../data/loader'
 import {
@@ -66,6 +67,7 @@ export function resolveRecipeTree(
   let minScale = Infinity
   for (const [item, demanded] of pass1) {
     if (getDefaultRecipe(item, recipeOverrides) !== null) continue // skip production items
+    if (INFINITE_RESOURCES.has(item)) continue // treat as unlimited, never bottleneck
 
     const config = minerConfigs.get(item) ?? DEFAULT_MINER_CONFIG
     const mRate = getMinerRate(config)

@@ -12,6 +12,10 @@ export const MACHINE_STATIONS = new Set([
 // create circular dependencies in the recipe tree — treat them as raw materials.
 export const RAW_FLUID_RESOURCES = new Set(['水', '原油', '窒素ガス'])
 
+// Resources treated as effectively unlimited (no miner-rate constraint).
+// Water can be extracted anywhere from water bodies without node limitations.
+export const INFINITE_RESOURCES = new Set(['水'])
+
 // Only machine-producible recipes with valid inputs/outputs
 export const allRecipes: RawRecipe[] = (recipesJson as RawRecipe[]).filter(
   r =>
