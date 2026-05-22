@@ -6,6 +6,7 @@ export interface MinerConfig {
   purity: OrePurity
   clockSpeed: number   // 1–250 %
   sommersloop: number  // 0 〜 MINER_SOMERSLOOP_SLOTS[mk]
+  customRate?: number  // set to override computed rate with a direct value
 }
 
 /** 採鉱機の産出量 (個/min) — 100%クロック・ソマースループ0の基本値 */
@@ -39,9 +40,11 @@ export const DEFAULT_MINER_CONFIG: MinerConfig = {
 }
 
 /** オーバークロック・ソマースループを含む産出量
+ * customRate が設定されている場合はそれを直接使用する
  * 速度倍率 = 1 + (投入数 / スロット数)  →  最大投入で2倍
  */
 export function getMinerRate(config: MinerConfig): number {
+  if (config.customRate !== undefined) return config.customRate
   const base = MINER_RATES[config.mk][config.purity]
   const slots = MINER_SOMERSLOOP_SLOTS[config.mk]
   return base * (config.clockSpeed / 100) * (1 + config.sommersloop / slots)

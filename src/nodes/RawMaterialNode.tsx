@@ -64,6 +64,20 @@ export const RawMaterialNode = memo(function RawMaterialNode({
     [item, minerConfig, onMinerConfigChange],
   )
 
+  const handleCustomRateChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = Number(e.target.value)
+      if (e.target.value === '' || isNaN(v)) return
+      onMinerConfigChange(item, { ...minerConfig, customRate: Math.max(0, v) })
+    },
+    [item, minerConfig, onMinerConfigChange],
+  )
+
+  const handleClearCustomRate = useCallback(() => {
+    const { customRate: _, ...rest } = minerConfig
+    onMinerConfigChange(item, rest as typeof minerConfig)
+  }, [item, minerConfig, onMinerConfigChange])
+
   const handleRecipeSwitch = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       onRecipeChange(item, e.target.value)
@@ -72,6 +86,7 @@ export const RawMaterialNode = memo(function RawMaterialNode({
   )
 
   const hasManufacturingRecipes = availableRecipes.length > 0
+  const isCustomRate = minerConfig.customRate !== undefined
 
 
   return (
@@ -154,8 +169,8 @@ export const RawMaterialNode = memo(function RawMaterialNode({
         )}
 
         {/* Mk + Purity */}
-        <div style={{ display: 'flex', gap: 5 }}>
-          <select value={minerConfig.mk} onChange={handleMkChange} className="nodrag" style={selectStyle}>
+        <div style={{ display: 'flex', gap: 5, opacity: isCustomRate ? 0.35 : 1 }}>
+          <select value={minerConfig.mk} onChange={handleMkChange} className="nodrag" style={selectStyle} disabled={isCustomRate}>
             {MINER_MK_OPTIONS.map(mk => (
               <option key={mk} value={mk}>{mk}</option>
             ))}
@@ -165,6 +180,7 @@ export const RawMaterialNode = memo(function RawMaterialNode({
             onChange={handlePurityChange}
             className="nodrag"
             style={{ ...selectStyle, color: PURITY_COLOR[minerConfig.purity] }}
+            disabled={isCustomRate}
           >
             {PURITY_OPTIONS.map(p => (
               <option key={p} value={p}>{p}</option>
@@ -173,7 +189,7 @@ export const RawMaterialNode = memo(function RawMaterialNode({
         </div>
 
         {/* Clock speed + Sommersloop */}
-        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', opacity: isCustomRate ? 0.35 : 1 }}>
           <span style={{ color: '#facc15', fontSize: 11 }}>⚡</span>
           <input
             type="number"
@@ -183,6 +199,7 @@ export const RawMaterialNode = memo(function RawMaterialNode({
             value={minerConfig.clockSpeed}
             onChange={handleClockChange}
             className="nodrag"
+            disabled={isCustomRate}
             style={{
               width: 52,
               background: '#0f172a',
@@ -202,6 +219,7 @@ export const RawMaterialNode = memo(function RawMaterialNode({
             onChange={handleSommersloopChange}
             className="nodrag"
             style={{ ...selectStyle, flex: 1, color: '#a78bfa' }}
+            disabled={isCustomRate}
           >
             {getSommersloopOptions(minerConfig.mk).map(n => {
               const slots = MINER_SOMERSLOOP_SLOTS[minerConfig.mk]
@@ -225,11 +243,48 @@ export const RawMaterialNode = memo(function RawMaterialNode({
           gap: 4,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: '#64748b', fontSize: 10 }}>1台の産出</span>
-          <span style={{ color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
-            {minerRate.toFixed(0)}/min
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: '#64748b', fontSize: 10, whiteSpace: 'nowrap' }}>産出量/min</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={isCustomRate ? minerConfig.customRate : minerRate}
+              onChange={handleCustomRateChange}
+              className="nodrag"
+              style={{
+                width: 72,
+                background: isCustomRate ? '#1a2a1a' : '#0f172a',
+                border: `1px solid ${isCustomRate ? '#22c55e' : '#334155'}`,
+                borderRadius: 4,
+                color: isCustomRate ? '#4ade80' : '#94a3b8',
+                padding: '2px 4px',
+                fontSize: 11,
+                textAlign: 'right',
+                outline: 'none',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            />
+            {isCustomRate && (
+              <button
+                onClick={handleClearCustomRate}
+                className="nodrag"
+                title="リセット"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  fontSize: 10,
+                  padding: '1px 3px',
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
