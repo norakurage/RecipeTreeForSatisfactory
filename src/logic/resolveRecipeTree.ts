@@ -69,7 +69,8 @@ export function resolveRecipeTree(
     if (getDefaultRecipe(item, recipeOverrides) !== null) continue // skip production items
     if (INFINITE_RESOURCES.has(item)) continue // treat as unlimited, never bottleneck
 
-    const config = minerConfigs.get(item) ?? DEFAULT_MINER_CONFIG
+    if (!minerConfigs.has(item)) continue // unconfigured → treat as unlimited
+    const config = minerConfigs.get(item)!
     const mRate = getMinerRate(config)
     if (mRate <= 0 || demanded <= 0) continue
 
